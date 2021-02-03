@@ -17,8 +17,7 @@ require 'net/http/post/multipart'
 module PokitDok
   # PokitDok API client implementation for Ruby.
   class PokitDok < OAuthApplicationClient
-    attr_reader :api_client # :nodoc:
-    attr_reader :api_url
+    attr_reader :api_version
     attr_reader :version
     attr_reader :status_code
 
@@ -32,12 +31,14 @@ module PokitDok
     #
     #  TODO: Make it simpler to pass in params out of order (also so you don't have to do init(..., nil, nil, nil, param))
     #
-    def initialize(client_id, client_secret, version='v4', base='https://platform.pokitdok.com',
+    def initialize(client_id, client_secret, api_version='v1', token_version='v2', base='https://sandbox.apis.changehealthcare.com',
                    redirect_uri=nil, scope= nil, code=nil, token= nil)
       @version = version
-      @api_url = "#{base}/api/#{version}"
+      @base_url = base
+      @api_version = api_version
       @user_agent = "pokitdok-ruby#0.9.0##{Gem::Platform.local.os}##{Gem::Platform.local.version}"
-      super(client_id, client_secret, '/oauth2/token', redirect_uri, scope, code, token, user_agent)
+      @token_url = "/apip/auth/#{token_version}/token"
+      super(client_id, client_secret, token_url, redirect_uri, scope, code, token, user_agent)
     end
 
     #
@@ -146,7 +147,7 @@ module PokitDok
     # +params+ an optional hash of parameters that will be sent in the POST body
     #
     def claims(params = {})
-      post('claims/', params)
+      post("/medicalnetwork/pd/claims/#{api_version}/claims", params)
     end
 
     # Invokes the claims status endpoint.
@@ -154,7 +155,7 @@ module PokitDok
     # +params+ an optional hash of parameters that will be sent in the POST body
     #
     def claims_status(params = {})
-      post('claims/status', params)
+      post("/medicalnetwork/pd/claimsstatus/#{api_version}", params)
     end
 
     # Uploads an .837 file to the claims convert endpoint.
@@ -171,7 +172,7 @@ module PokitDok
     # +params+ an optional hash of parameters that will be sent in the POST body
     #
     def eligibility(params = {})
-      post('eligibility/', params)
+      post("/medicalnetwork/pd/eligibility/#{api_version}/eligibility", params)
     end
 
     # Invokes the enrollment endpoint.

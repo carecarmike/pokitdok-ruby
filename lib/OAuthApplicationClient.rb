@@ -2,7 +2,8 @@ require 'oauth2'
 
 # OAuth 2.0 Client implementation for Ruby.
 class OAuthApplicationClient
-  attr_accessor :token, :user_agent
+  attr_accessor :token, :token_url, :user_agent
+  attr_reader :auth_client
 
   # Connect to the PokitDok API with the specified Client ID and Client
   # Authentication logic located within this class.
@@ -26,7 +27,7 @@ class OAuthApplicationClient
     @user_agent = user_agent
     @token  = token
 
-    @api_client = OAuth2::Client.new(@client_id, @client_secret, site: @api_url, token_url: @token_url, raise_errors: false)
+    @auth_client = OAuth2::Client.new(@client_id, @client_secret, site: @base_url, token_url: @token_url, raise_errors: false)
     if @token.nil?
       fetch_access_token(@code)
     end
@@ -51,8 +52,7 @@ class OAuthApplicationClient
     if isAccessTokenExpired?
       fetch_access_token()
     end
-    headers.merge({ headers: { :'Content-Type' => 'application/json'}})
-    @token.put(path, body: params.to_json, headers: headers({:'Content-Type' => 'application/json'}), &block)
+    @token.put(path, body: params.to_json, headers: headers, &block)
   end
 
   # Perform a POST request given the http request path and optional params
@@ -63,8 +63,7 @@ class OAuthApplicationClient
     if isAccessTokenExpired?
       fetch_access_token()
     end
-    headers.merge({ headers: { :'Content-Type' => 'application/json'}})
-    @token.post(path, body: params.to_json, headers: headers({:'Content-Type' => 'application/json'}), &block)
+    @token.post(path, body: params.to_json, headers: headers, &block)
   end
 
   # Perform a POST request given the http request path, a file and optional params
@@ -72,24 +71,24 @@ class OAuthApplicationClient
   # +path+ request path
   # +file+ the file to be sent with the request
   # +params+ an optional hash of parameters that will be sent in the request
-  def post_file(endpoint, file=nil, params={})
-    if isAccessTokenExpired?
-      fetch_access_token()
-    end
-    url = URI.parse(@api_url + endpoint)
-    File.open(file) do |f|
-      additional_params = params.merge({'file' => UploadIO.new(f, 'application/EDI-X12', file)})
-      req = Net::HTTP::Post::Multipart.new(url.path, additional_params)
-      req['Authorization'] = "Bearer #{self.token.token}"
-      req['User-Agent'] = @user_agent
+  # def post_file(endpoint, file=nil, params={})
+  #   if isAccessTokenExpired?
+  #     fetch_access_token()
+  #   end
+  #   url = URI.parse(@api_url + endpoint)
+  #   File.open(file) do |f|
+  #     additional_params = params.merge({'file' => UploadIO.new(f, 'application/EDI-X12', file)})
+  #     req = Net::HTTP::Post::Multipart.new(url.path, additional_params)
+  #     req['Authorization'] = "Bearer #{self.token.token}"
+  #     req['User-Agent'] = @user_agent
 
-      @response = Net::HTTP.start(url.host, url.port, :use_ssl => true) do |http|
-        http.request(req)
-      end
-      @status_code = @response.code.to_i
-      JSON.parse(@response.body)
-    end
-  end
+  #     @response = Net::HTTP.start(url.host, url.port, :use_ssl => true) do |http|
+  #       http.request(req)
+  #     end
+  #     @status_code = @response.code.to_i
+  #     JSON.parse(@response.body)
+  #   end
+  # end
 
   # Perform a DELETE request given the http request path and optional params
   #
@@ -99,7 +98,7 @@ class OAuthApplicationClient
     if isAccessTokenExpired?
       fetch_access_token()
     end
-    @token.delete(path, body: params.to_json, headers: headers({:'Content-Type' => 'application/json'}), &block)
+    @token.delete(path, body: params.to_json, headers: headers, &block)
   end
 
   # Construct OAuth2 Authorization Grant URL
@@ -107,7 +106,7 @@ class OAuthApplicationClient
     if @redirect_uri.nil? || @scope.nil?
       raise 'A redirect_uri and scope must be specified when the client is instantiated in order to get a working authorization URL'
     end
-    @api_client.auth_code.authorize_url(redirect_uri: @redirect_uri, scope: @scope)
+    @auth_client.auth_code.authorize_url(redirect_uri: @redirect_uri, scope: @scope)
   end
 
   ### PRIVATE METHODS ###
@@ -119,20 +118,24 @@ class OAuthApplicationClient
   # +code+ optional authorization code used for scope purposes
   def fetch_access_token(code = nil)
     if code
-      # Currently non functioning as our OAuth2 authorization_code grant type is not implemented on the server
+      # Currently non functioning as Change Health OAuth2 grant type is expected to be client credentials
       params =  {
           scope: @scope,
           redirect_uri: @redirect_uri
       }
-      @token = @api_client.auth_code.get_token(code, params)
+      @token = @auth_client.auth_code.get_token(code, params)
     else
-      @token = @api_client.client_credentials.get_token()
+      @token = @auth_client.client_credentials.get_token()
     end
   end
 
   # Returns a standard set of headers to be passed along with all requests
   def headers(additional_headers = {})
-    { 'User-Agent' => @user_agent }.merge(additional_headers)
+    {
+      'User-Agent' => @user_agent,
+      'Content-Type' => 'application/json',
+      'Accept' => 'application/json'
+    }.merge(additional_headers)
   end
 
   # Check if the access token is expired
